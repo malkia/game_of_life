@@ -27,7 +27,7 @@ jobs:
       run: flutter packages get
       working-directory: ./
     - name: Build Web
-      run: flutter build web --release --web-renderer=auto --tree-shake-icons
+      run: flutter build web --release --web-renderer=auto
       working-directory: ./
     # - name: Test
     #   run: flutter test
