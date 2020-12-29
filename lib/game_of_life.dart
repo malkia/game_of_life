@@ -32,7 +32,6 @@ class GameOfLifePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    canvas.save();
     Paint p = Paint();
     p.color = Colors.red;
     canvas.drawLine(Offset(0, 0), Offset(size.width, size.height), p);
@@ -49,7 +48,6 @@ class GameOfLifePainter extends CustomPainter {
         canvas.drawRect(r, p);
       }
     }
-    canvas.restore();
   }
 
   @override
