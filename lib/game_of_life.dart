@@ -31,43 +31,80 @@ void updateGameOfLife(
 
 var counter = 0x7f;
 
-Future<ui.Image> _createImage(int width, int height) async {
-  final Completer<ui.Image> completer = Completer<ui.Image>();
+Future<ui.Image> _createImage(int width, int height, Uint8List cells) async {
+  final completer = Completer<ui.Image>();
+  assert(width * height == cells.length);
+  var pixels = Uint8List(cells.length * 4);
+  for (var index = 0; index < cells.length; index++) {
+    var alive = (cells[index] != 0);
+    pixels[index * 4 + 0] = alive ? 0xFF : 0; //counter;
+    pixels[index * 4 + 1] = alive ? 0 : 0xFF;
+    pixels[index * 4 + 2] = counter; //alive ? 0 : 0xFF;
+    pixels[index * 4 + 3] = 0xFF; //alive ? 0 : 0xFF;
+  }
   ui.decodeImageFromPixels(
-    Uint8List.fromList(
-        List<int>.filled(width * height * 4, counter, growable: false)),
+    pixels,
     width,
     height,
     ui.PixelFormat.rgba8888,
-    (ui.Image image) {
-      completer.complete(image);
-    },
+    completer.complete,
   );
   counter++;
   return await completer.future;
 }
 
+// Future<ui.FrameInfo> makeImageFrame() async {
+//   var imageWidth = 64;
+//   var imageHeight = 64;
+//   var pixels = Uint8List(imageWidth * imageHeight * 4);
+//   for (var y = 0; y < imageHeight; y++)
+//     for (var x = 0; x < imageWidth; x++) {
+//       var offset = (y * imageWidth + x) * 4;
+//       pixels[offset + 0] = 0xFF;
+//       pixels[offset + 0] = (x * y) % 256;
+//       pixels[offset + 0] = (x + y) % 256;
+//       pixels[offset + 0] = 0xFF;
+//     }
+//   var imageBuff = await ui.ImmutableBuffer.fromUint8List(pixels);
+//   var imageDesc = ui.ImageDescriptor.raw(imageBuff,
+//       width: imageWidth,
+//       height: imageHeight,
+//       rowBytes: imageWidth * 4,
+//       pixelFormat: ui.PixelFormat.rgba8888);
+//   var codec = await imageDesc.instantiateCodec(
+//       targetWidth: imageWidth, targetHeight: imageHeight);
+//   return codec.getNextFrame();
+// }
+
 class GameOfLifePainter extends CustomPainter {
   final _GameOfLifeWidgetState state;
-  final ui.Image image;
+  final ui.Image? image;
 
   @override
   void paint(Canvas canvas, Size size) {
     Paint p = Paint();
-    var cellWidth = size.width / state.cellsByX;
-    var cellHeight = size.height / state.cellsByY;
-    for (var y = 0; y < state.cellsByY; y++) {
-      for (var x = 0; x < state.cellsByX; x++) {
-        var ry = y * cellHeight;
-        var rx = x * cellWidth;
-        var r = Rect.fromLTWH(rx, ry, cellWidth, cellHeight);
-        p.color = state.cells[y * state.cellsByX + x] == 0
-            ? Colors.green
-            : Colors.red;
-        canvas.drawRect(r, p);
-      }
+    // var cellWidth = size.width / state.cellsByX;
+    // var cellHeight = size.height / state.cellsByY;
+    // for (var y = 0; y < state.cellsByY; y++) {
+    //   for (var x = 0; x < state.cellsByX; x++) {
+    //     var ry = y * cellHeight;
+    //     var rx = x * cellWidth;
+    //     var r = Rect.fromLTWH(rx, ry, cellWidth, cellHeight);
+    //     p.color = state.cells[y * state.cellsByX + x] == 0
+    //         ? Colors.green
+    //         : Colors.red;
+    //     canvas.drawRect(r, p);
+    //   }
+    // }
+    if (image != null) {
+      // canvas.drawImage(image!, Offset(5, 5), p);
+      canvas.drawImageRect(
+          image!,
+          Rect.fromLTWH(
+              0, 0, image!.width.toDouble(), image!.height.toDouble()),
+          Rect.fromLTWH(0, 0, size.width, size.height),
+          Paint());
     }
-    canvas.drawImage(image, Offset(5, 5), p);
   }
 
   @override
@@ -134,7 +171,7 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
 
   @override
   Widget build(BuildContext context) => FutureBuilder<ui.Image>(
-      future: _createImage(64, 64),
+      future: _createImage(widget.width, widget.height, _cells),
       builder: (context, snapshot) {
         return LayoutBuilder(
             builder: (BuildContext context, BoxConstraints constraints) =>
@@ -149,7 +186,7 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
                                 constraints.maxHeight, constraints.maxWidth),
                             child: CustomPaint(
                                 painter: GameOfLifePainter(
-                                    state: this, image: snapshot.data!))),
+                                    state: this, image: snapshot.data))),
                       ),
                       Row(
                           mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -160,7 +197,10 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
                                 child: Text('Play'),
                                 onPressed: _ticker!.isActive
                                     ? null
-                                    : () => setState(() => _ticker!.start()),
+                                    : () {
+                                        _ticker!.start();
+                                        setState(() {});
+                                      },
                               ),
                             if (_ticker != null)
                               FlatButton(
