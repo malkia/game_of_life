@@ -1,8 +1,10 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/src/scheduler/ticker.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/scheduler.dart';
+import 'package:flutter/painting.dart';
 
 void updateGameOfLife(
     int width, int height, Uint8List inputCells, Uint8List outputCells) {
@@ -27,14 +29,31 @@ void updateGameOfLife(
   }
 }
 
+var counter = 0x7f;
+
+Future<ui.Image> _createImage(int width, int height) async {
+  final Completer<ui.Image> completer = Completer<ui.Image>();
+  ui.decodeImageFromPixels(
+    Uint8List.fromList(
+        List<int>.filled(width * height * 4, counter, growable: false)),
+    width,
+    height,
+    ui.PixelFormat.rgba8888,
+    (ui.Image image) {
+      completer.complete(image);
+    },
+  );
+  counter++;
+  return await completer.future;
+}
+
 class GameOfLifePainter extends CustomPainter {
   final _GameOfLifeWidgetState state;
+  final ui.Image image;
 
   @override
   void paint(Canvas canvas, Size size) {
     Paint p = Paint();
-    p.color = Colors.red;
-    canvas.drawLine(Offset(0, 0), Offset(size.width, size.height), p);
     var cellWidth = size.width / state.cellsByX;
     var cellHeight = size.height / state.cellsByY;
     for (var y = 0; y < state.cellsByY; y++) {
@@ -48,13 +67,14 @@ class GameOfLifePainter extends CustomPainter {
         canvas.drawRect(r, p);
       }
     }
+    canvas.drawImage(image, Offset(5, 5), p);
   }
 
   @override
   bool shouldRepaint(GameOfLifePainter oldDelegate) =>
-      oldDelegate.state != state;
+      oldDelegate.state != state || oldDelegate.image != image;
 
-  GameOfLifePainter({this.state});
+  GameOfLifePainter({required this.state, required this.image});
 }
 
 class GameOfLifeWidget extends StatefulWidget {
@@ -62,15 +82,15 @@ class GameOfLifeWidget extends StatefulWidget {
   final int height;
   @override
   _GameOfLifeWidgetState createState() => _GameOfLifeWidgetState();
-  GameOfLifeWidget({@required this.width, @required this.height});
+  GameOfLifeWidget({required this.width, required this.height});
 }
 
 class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
     with SingleTickerProviderStateMixin {
-  Ticker _ticker;
-  Uint8List _cellsA;
-  Uint8List _cellsB;
-  Uint8List _cells;
+  Ticker? _ticker;
+  late Uint8List _cellsA;
+  late Uint8List _cellsB;
+  late Uint8List _cells;
 
   get cells => _cells;
   get cellsByX => widget.width;
@@ -107,48 +127,58 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
 
   @override
   void dispose() {
-    _ticker.dispose();
+    _ticker?.dispose();
     _ticker = null;
     super.dispose();
   }
 
   @override
-  Widget build(BuildContext context) => LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) =>
-          Column(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-            Flexible(
-              child: Container(
-                  width: min(constraints.maxHeight, constraints.maxWidth),
-                  height: min(constraints.maxHeight, constraints.maxWidth),
-                  child: CustomPaint(painter: GameOfLifePainter(state: this))),
-            ),
-            Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_ticker != null)
-                    FlatButton(
-                      child: Text('Play'),
-                      onPressed: _ticker.isActive
-                          ? null
-                          : () => setState(() => _ticker.start()),
-                    ),
-                  if (_ticker != null)
-                    FlatButton(
-                        child: Text('Stop'),
-                        onPressed: _ticker.isActive
-                            ? () => setState(() => _ticker.stop())
-                            : null),
-                  if (_ticker != null)
-                    FlatButton(
-                        child: Text('Step'),
-                        onPressed: _ticker.isActive
-                            ? null
-                            : () => setState(() => update())),
-                  FlatButton(
-                    child: Text('Random'),
-                    onPressed: () => setState(() => init()),
-                  ),
-                ])
-          ]));
+  Widget build(BuildContext context) => FutureBuilder<ui.Image>(
+      future: _createImage(64, 64),
+      builder: (context, snapshot) {
+        return LayoutBuilder(
+            builder: (BuildContext context, BoxConstraints constraints) =>
+                Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      Flexible(
+                        child: Container(
+                            width: min(
+                                constraints.maxHeight, constraints.maxWidth),
+                            height: min(
+                                constraints.maxHeight, constraints.maxWidth),
+                            child: CustomPaint(
+                                painter: GameOfLifePainter(
+                                    state: this, image: snapshot.data!))),
+                      ),
+                      Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_ticker != null)
+                              FlatButton(
+                                child: Text('Play'),
+                                onPressed: _ticker!.isActive
+                                    ? null
+                                    : () => setState(() => _ticker!.start()),
+                              ),
+                            if (_ticker != null)
+                              FlatButton(
+                                  child: Text('Stop'),
+                                  onPressed: _ticker!.isActive
+                                      ? () => setState(() => _ticker!.stop())
+                                      : null),
+                            if (_ticker != null)
+                              FlatButton(
+                                  child: Text('Step'),
+                                  onPressed: _ticker!.isActive
+                                      ? null
+                                      : () => setState(() => update())),
+                            FlatButton(
+                              child: Text('Random'),
+                              onPressed: () => setState(() => init()),
+                            ),
+                          ])
+                    ]));
+      });
 }
