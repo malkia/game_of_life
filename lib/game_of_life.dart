@@ -47,11 +47,16 @@ Future<ui.Image> _createImage(int width, int height, Uint8List cells) async {
     _pixels,
     width,
     height,
-    ui.PixelFormat.rgba8888,
-    completer.complete,
+    ui.PixelFormat.bgra8888,
+    (ui.Image image) {
+      print("decodeImageFromPixels CALLBACK CALLED");
+      completer.complete(image);
+      print("decodeImageFromPixels CALLBACK COMPLETED!");
+    },
   );
   _counter++;
-  return completer.future;
+  print("decodeImageFromPixels FUTURE CREATED!");
+  return await completer.future;
 }
 
 // Future<ui.FrameInfo> makeImageFrame() async {
@@ -79,7 +84,7 @@ Future<ui.Image> _createImage(int width, int height, Uint8List cells) async {
 
 class GameOfLifePainter extends CustomPainter {
   final _GameOfLifeWidgetState state;
-  final ui.Image? image;
+  final ui.Image image;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -97,15 +102,12 @@ class GameOfLifePainter extends CustomPainter {
     //     canvas.drawRect(r, p);
     //   }
     // }
-    if (image != null) {
-      // canvas.drawImage(image!, Offset(5, 5), p);
-      canvas.drawImageRect(
-          image!,
-          Rect.fromLTWH(
-              0, 0, image!.width.toDouble(), image!.height.toDouble()),
-          Rect.fromLTWH(0, 0, size.width, size.height),
-          Paint());
-    }
+    // canvas.drawImage(image!, Offset(5, 5), p);
+    canvas.drawImageRect(
+        image!,
+        Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
+        Rect.fromLTWH(0, 0, size.width, size.height),
+        Paint());
   }
 
   @override
@@ -134,7 +136,7 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
   get cellsByX => widget.width;
   get cellsByY => widget.height;
 
-  late Future<ui.Image> futureImage;
+  Future<ui.Image>? futureImage;
 
   void init() {
     _cellsA.fillRange(0, _cellsA.length - 1, 0);
@@ -146,7 +148,8 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
         _cellsA[y * widget.width + x] = random.nextInt(5) == 0 ? 1 : 0;
   }
 
-  void update() {
+  void update() async {
+    if (futureImage != null) await futureImage;
     updateGameOfLife(
         widget.width,
         widget.height,
@@ -157,11 +160,7 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
   }
 
   @override
-  void didUpdateWidget(GameOfLifeWidget oldWidget) {
-    super.didUpdateWidget(oldWidget);
-  }
-
-  void initState() {
+  void initState() async {
     super.initState();
     _ticker = createTicker((Duration elapsed) => setState(() => update()));
     var size = widget.width * widget.height;
@@ -169,7 +168,7 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
     _cellsB = Uint8List(size);
     _cells = _cellsA;
     init();
-    futureImage = _createImage(widget.width, widget.height, _cells);
+    update();
   }
 
   @override
@@ -183,20 +182,21 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
   Widget build(BuildContext context) => LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) =>
           Column(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-            Flexible(
-              child: Container(
-                  width: min(constraints.maxHeight, constraints.maxWidth),
-                  height: min(constraints.maxHeight, constraints.maxWidth),
-                  child: FutureBuilder<ui.Image>(
-                      future: _createImage(widget.width, widget.height, _cells),
-                      builder: (context, snapshot) {
-                        return snapshot.hasData
-                            ? CustomPaint(
-                                painter: GameOfLifePainter(
-                                    state: this, image: snapshot.data))
-                            : CircularProgressIndicator();
-                      })),
-            ),
+            if (futureImage != null)
+              Flexible(
+                child: Container(
+                    width: min(constraints.maxHeight, constraints.maxWidth),
+                    height: min(constraints.maxHeight, constraints.maxWidth),
+                    child: FutureBuilder<ui.Image>(
+                        future: futureImage,
+                        builder: (context, snapshot) {
+                          return snapshot.hasData && snapshot.data != null
+                              ? CustomPaint(
+                                  painter: GameOfLifePainter(
+                                      state: this, image: snapshot.data!))
+                              : CircularProgressIndicator();
+                        })),
+              ),
             Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 mainAxisSize: MainAxisSize.min,
