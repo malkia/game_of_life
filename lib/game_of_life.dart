@@ -29,28 +29,29 @@ void updateGameOfLife(
   }
 }
 
-var counter = 0x7f;
+var _counter = 0x7f;
+var _pixels = Uint8List(1);
 
 Future<ui.Image> _createImage(int width, int height, Uint8List cells) async {
   final completer = Completer<ui.Image>();
   assert(width * height == cells.length);
-  var pixels = Uint8List(cells.length * 4);
+  if (_pixels.length != cells.length * 4) _pixels = Uint8List(cells.length * 4);
   for (var index = 0; index < cells.length; index++) {
     var alive = (cells[index] != 0);
-    pixels[index * 4 + 0] = alive ? 0xFF : 0; //counter;
-    pixels[index * 4 + 1] = alive ? 0 : 0xFF;
-    pixels[index * 4 + 2] = counter; //alive ? 0 : 0xFF;
-    pixels[index * 4 + 3] = 0xFF; //alive ? 0 : 0xFF;
+    _pixels[index * 4 + 0] = alive ? 0xFF : 0; //counter;
+    _pixels[index * 4 + 1] = alive ? 0 : 0xFF;
+    _pixels[index * 4 + 2] = _counter; //alive ? 0 : 0xFF;
+    _pixels[index * 4 + 3] = 0xFF; //alive ? 0 : 0xFF;
   }
   ui.decodeImageFromPixels(
-    pixels,
+    _pixels,
     width,
     height,
     ui.PixelFormat.rgba8888,
     completer.complete,
   );
-  counter++;
-  return await completer.future;
+  _counter++;
+  return completer.future;
 }
 
 // Future<ui.FrameInfo> makeImageFrame() async {
@@ -133,6 +134,8 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
   get cellsByX => widget.width;
   get cellsByY => widget.height;
 
+  late Future<ui.Image> futureImage;
+
   void init() {
     _cellsA.fillRange(0, _cellsA.length - 1, 0);
     _cellsB.fillRange(0, _cellsB.length - 1, 0);
@@ -150,6 +153,12 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
         _cells == _cellsA ? _cellsA : _cellsB,
         _cells == _cellsA ? _cellsB : _cellsA);
     _cells = (_cells == _cellsA) ? _cellsB : _cellsA;
+    futureImage = _createImage(widget.width, widget.height, _cells);
+  }
+
+  @override
+  void didUpdateWidget(GameOfLifeWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
   }
 
   void initState() {
@@ -160,6 +169,7 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
     _cellsB = Uint8List(size);
     _cells = _cellsA;
     init();
+    futureImage = _createImage(widget.width, widget.height, _cells);
   }
 
   @override
@@ -170,55 +180,53 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<ui.Image>(
-      future: _createImage(widget.width, widget.height, _cells),
-      builder: (context, snapshot) {
-        return LayoutBuilder(
-            builder: (BuildContext context, BoxConstraints constraints) =>
-                Column(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      Flexible(
-                        child: Container(
-                            width: min(
-                                constraints.maxHeight, constraints.maxWidth),
-                            height: min(
-                                constraints.maxHeight, constraints.maxWidth),
-                            child: CustomPaint(
+  Widget build(BuildContext context) => LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints constraints) =>
+          Column(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+            Flexible(
+              child: Container(
+                  width: min(constraints.maxHeight, constraints.maxWidth),
+                  height: min(constraints.maxHeight, constraints.maxWidth),
+                  child: FutureBuilder<ui.Image>(
+                      future: _createImage(widget.width, widget.height, _cells),
+                      builder: (context, snapshot) {
+                        return snapshot.hasData
+                            ? CustomPaint(
                                 painter: GameOfLifePainter(
-                                    state: this, image: snapshot.data))),
-                      ),
-                      Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (_ticker != null)
-                              FlatButton(
-                                child: Text('Play'),
-                                onPressed: _ticker!.isActive
-                                    ? null
-                                    : () {
-                                        _ticker!.start();
-                                        setState(() {});
-                                      },
-                              ),
-                            if (_ticker != null)
-                              FlatButton(
-                                  child: Text('Stop'),
-                                  onPressed: _ticker!.isActive
-                                      ? () => setState(() => _ticker!.stop())
-                                      : null),
-                            if (_ticker != null)
-                              FlatButton(
-                                  child: Text('Step'),
-                                  onPressed: _ticker!.isActive
-                                      ? null
-                                      : () => setState(() => update())),
-                            FlatButton(
-                              child: Text('Random'),
-                              onPressed: () => setState(() => init()),
-                            ),
-                          ])
-                    ]));
-      });
+                                    state: this, image: snapshot.data))
+                            : CircularProgressIndicator();
+                      })),
+            ),
+            Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_ticker != null)
+                    FlatButton(
+                      child: Text('Play'),
+                      onPressed: _ticker!.isActive
+                          ? null
+                          : () {
+                              _ticker!.start();
+                              setState(() {});
+                            },
+                    ),
+                  if (_ticker != null)
+                    FlatButton(
+                        child: Text('Stop'),
+                        onPressed: _ticker!.isActive
+                            ? () => setState(() => _ticker!.stop())
+                            : null),
+                  if (_ticker != null)
+                    FlatButton(
+                        child: Text('Step'),
+                        onPressed: _ticker!.isActive
+                            ? null
+                            : () => setState(() => update())),
+                  FlatButton(
+                    child: Text('Random'),
+                    onPressed: () => setState(() => init()),
+                  ),
+                ])
+          ]));
 }
