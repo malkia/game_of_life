@@ -32,6 +32,46 @@ void updateGameOfLife(
 var _counter = 0x7f;
 var _pixels = Uint8List(1);
 
+int uintvarEncode(int num) {
+  if (num < 128) return num;
+  var mod = num % ~128;
+  num ~/= 128;
+  return mod | 0x80 + num;
+}
+
+// TODO: Need to make this working for any width/height
+// TODO: Might be just worth directly modifying the bitmap too!
+Future<ui.Image> _createImage2(int width, int height, Uint8List cells) async {
+  final completer = Completer<ui.Image>();
+  // https://en.wikipedia.org/wiki/Wireless_Application_Protocol_Bitmap_Format
+  var wbmapWidth = 128;
+  var wbmapHeight = 128;
+  var wbmapWidthStorageSize = wbmapWidth >= 128 ? 2 : 1;
+  var wbmapHeightStorageSize = wbmapWidth >= 128 ? 2 : 1;
+  var wbmapWidthAligned = ((wbmapWidth + 7) ~/ 8) * 8;
+  var wbmapBits = wbmapWidthAligned * wbmapHeight;
+  assert(wbmapBits % 8 == 0);
+  var wbmap = Uint8List(
+      2 + wbmapWidthStorageSize + wbmapHeightStorageSize + wbmapBits ~/ 8);
+  wbmap[0] = 0;
+  wbmap[1] = 0;
+  wbmap[2] = 0x81;
+  wbmap[3] = 0;
+  wbmap[4] = 0x81;
+  wbmap[5] = 0;
+  for (var index = 0; index < cells.length; index += 8)
+    wbmap[6 + (index >> 3)] = ((cells[index + 0] << 7) |
+        (cells[index + 1] << 6) |
+        (cells[index + 2] << 5) |
+        (cells[index + 3] << 4) |
+        (cells[index + 4] << 3) |
+        (cells[index + 5] << 2) |
+        (cells[index + 6] << 1) |
+        (cells[index + 7] << 0));
+  ui.decodeImageFromList(wbmap, (ui.Image image) => completer.complete(image));
+  return await completer.future;
+}
+
 Future<ui.Image> _createImage(int width, int height, Uint8List cells) async {
   final completer = Completer<ui.Image>();
   assert(width * height == cells.length);
@@ -49,9 +89,7 @@ Future<ui.Image> _createImage(int width, int height, Uint8List cells) async {
     height,
     ui.PixelFormat.bgra8888,
     (ui.Image image) {
-      print("decodeImageFromPixels CALLBACK CALLED");
       completer.complete(image);
-      print("decodeImageFromPixels CALLBACK COMPLETED!");
     },
   );
   _counter++;
@@ -156,7 +194,7 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
         _cells == _cellsA ? _cellsA : _cellsB,
         _cells == _cellsA ? _cellsB : _cellsA);
     _cells = (_cells == _cellsA) ? _cellsB : _cellsA;
-    futureImage = _createImage(widget.width, widget.height, _cells);
+    futureImage = _createImage2(widget.width, widget.height, _cells);
   }
 
   @override
