@@ -262,7 +262,10 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
                           : () => setState(() => update())),
                   FlatButton(
                     child: Text('Random'),
-                    onPressed: () => setState(() => _init()),
+                    onPressed: () => setState(() {
+                      _init();
+                      update();
+                    }),
                   ),
                 ])
           ]));
