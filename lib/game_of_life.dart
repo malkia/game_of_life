@@ -147,7 +147,7 @@ class GameOfLifePainter extends CustomPainter {
     // }
     // canvas.drawImage(image!, Offset(5, 5), p);
     canvas.drawImageRect(
-        image!,
+        image,
         Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
         Rect.fromLTWH(0, 0, size.width, size.height),
         Paint());
@@ -170,7 +170,6 @@ class GameOfLifeWidget extends StatefulWidget {
 
 class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
     with SingleTickerProviderStateMixin {
-  Ticker? _ticker;
   late Uint8List _cellsA;
   late Uint8List _cellsB;
   late Uint8List _cells;
@@ -180,8 +179,9 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
   get cellsByY => widget.height;
 
   Future<ui.Image>? futureImage;
+  late AnimationController _controller;
 
-  void init() {
+  void _init() {
     _cellsA.fillRange(0, _cellsA.length - 1, 0);
     _cellsB.fillRange(0, _cellsB.length - 1, 0);
     _cells = _cellsA;
@@ -191,8 +191,12 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
         _cellsA[y * widget.width + x] = random.nextInt(5) == 0 ? 1 : 0;
   }
 
-  void update() async {
+  void _waitForFutureImage() async {
     if (futureImage != null) await futureImage;
+  }
+
+  void update() {
+    _waitForFutureImage();
     updateGameOfLife(
         widget.width,
         widget.height,
@@ -203,21 +207,23 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
   }
 
   @override
-  void initState() async {
+  void initState() {
     super.initState();
-    _ticker = createTicker((Duration elapsed) => setState(() => update()));
     var size = widget.width * widget.height;
     _cellsA = Uint8List(size);
     _cellsB = Uint8List(size);
-    _cells = _cellsA;
-    init();
+    _init();
     update();
+    _controller = AnimationController(
+        vsync: this, duration: const Duration(seconds: 1000))
+      ..repeat()
+      ..stop()
+      ..addListener(() => setState(() => update()));
   }
 
   @override
   void dispose() {
-    _ticker?.dispose();
-    _ticker = null;
+    _controller.dispose();
     super.dispose();
   }
 
@@ -244,31 +250,27 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (_ticker != null)
-                    FlatButton(
-                      child: Text('Play'),
-                      onPressed: _ticker!.isActive
+                  FlatButton(
+                    child: Text('Play'),
+                    onPressed: _controller.isAnimating
+                        ? null
+                        : () => setState(() {
+                              _controller.forward();
+                            }),
+                  ),
+                  FlatButton(
+                      child: Text('Stop'),
+                      onPressed: _controller.isAnimating
+                          ? () => setState(() => _controller.stop())
+                          : null),
+                  FlatButton(
+                      child: Text('Step'),
+                      onPressed: _controller.isAnimating
                           ? null
-                          : () {
-                              _ticker!.start();
-                              setState(() {});
-                            },
-                    ),
-                  if (_ticker != null)
-                    FlatButton(
-                        child: Text('Stop'),
-                        onPressed: _ticker!.isActive
-                            ? () => setState(() => _ticker!.stop())
-                            : null),
-                  if (_ticker != null)
-                    FlatButton(
-                        child: Text('Step'),
-                        onPressed: _ticker!.isActive
-                            ? null
-                            : () => setState(() => update())),
+                          : () => setState(() => update())),
                   FlatButton(
                     child: Text('Random'),
-                    onPressed: () => setState(() => init()),
+                    onPressed: () => setState(() => _init()),
                   ),
                 ])
           ]));
