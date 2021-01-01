@@ -179,7 +179,7 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
   get cellsByY => widget.height;
 
   Future<ui.Image>? futureImage;
-  late AnimationController _controller;
+  late Ticker _ticker;
 
   void _init() {
     _cellsA.fillRange(0, _cellsA.length - 1, 0);
@@ -214,16 +214,12 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
     _cellsB = Uint8List(size);
     _init();
     update();
-    _controller = AnimationController(
-        vsync: this, duration: const Duration(seconds: 1000))
-      ..repeat()
-      ..stop()
-      ..addListener(() => setState(() => update()));
+    _ticker = Ticker((Duration duration) => setState(() => update()));
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _ticker.dispose();
     super.dispose();
   }
 
@@ -252,20 +248,16 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
                 children: [
                   FlatButton(
                     child: Text('Play'),
-                    onPressed: _controller.isAnimating
-                        ? null
-                        : () => setState(() {
-                              _controller.forward();
-                            }),
+                    onPressed: _ticker.isActive ? null : () => _ticker.start(),
                   ),
                   FlatButton(
                       child: Text('Stop'),
-                      onPressed: _controller.isAnimating
-                          ? () => setState(() => _controller.stop())
+                      onPressed: _ticker.isActive
+                          ? () => setState(() => _ticker.stop())
                           : null),
                   FlatButton(
                       child: Text('Step'),
-                      onPressed: _controller.isAnimating
+                      onPressed: _ticker.isActive
                           ? null
                           : () => setState(() => update())),
                   FlatButton(
