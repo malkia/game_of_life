@@ -20,5 +20,5 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) => Scaffold(
       appBar: AppBar(title: Text('Game Of Life')),
-      body: Center(child: GameOfLifeWidget(width: 128, height: 128)));
+      body: Center(child: GameOfLifeWidget(width: 512, height: 512)));
 }

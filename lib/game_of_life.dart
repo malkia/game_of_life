@@ -32,11 +32,17 @@ void updateGameOfLife(
 var _counter = 0x7f;
 var _pixels = Uint8List(1);
 
-int uintvarEncode(int num) {
-  if (num < 128) return num;
-  var mod = num % ~128;
-  num ~/= 128;
-  return mod | 0x80 + num;
+int outVarSize(int v) {
+  assert(v >= 0);
+  return (v.bitLength + 6) ~/ 7;
+}
+
+int outVar(int v, Uint8List out, int outIndex) {
+  var parts = outVarSize(v);
+  for (var p = parts - 1; p > 0; p--)
+    out[outIndex++] = 0x80 | ((v >> (7 * p)) & 0x7F);
+  out[outIndex] = v & 0x7F;
+  return parts;
 }
 
 // TODO: Need to make this working for any width/height
@@ -44,23 +50,22 @@ int uintvarEncode(int num) {
 Future<ui.Image> _createImage2(int width, int height, Uint8List cells) async {
   final completer = Completer<ui.Image>();
   // https://en.wikipedia.org/wiki/Wireless_Application_Protocol_Bitmap_Format
-  var wbmapWidth = 128;
-  var wbmapHeight = 128;
-  var wbmapWidthStorageSize = wbmapWidth >= 128 ? 2 : 1;
-  var wbmapHeightStorageSize = wbmapWidth >= 128 ? 2 : 1;
+  var wbmapWidth = width;
+  var wbmapHeight = height;
+  var wbmapWidthSize = outVarSize(wbmapWidth);
+  var wbmapHeightSize = outVarSize(wbmapHeight);
   var wbmapWidthAligned = ((wbmapWidth + 7) ~/ 8) * 8;
   var wbmapBits = wbmapWidthAligned * wbmapHeight;
   assert(wbmapBits % 8 == 0);
-  var wbmap = Uint8List(
-      2 + wbmapWidthStorageSize + wbmapHeightStorageSize + wbmapBits ~/ 8);
-  wbmap[0] = 0;
-  wbmap[1] = 0;
-  wbmap[2] = 0x81;
-  wbmap[3] = 0;
-  wbmap[4] = 0x81;
-  wbmap[5] = 0;
+  var wbmap = Uint8List(2 + wbmapWidthSize + wbmapHeightSize + wbmapBits ~/ 8);
+  var offset = 0;
+  wbmap[offset++] = 0;
+  wbmap[offset++] = 0;
+  offset += outVar(wbmapWidth, wbmap, offset);
+  offset += outVar(wbmapHeight, wbmap, offset);
+  // TODO: Make it work on non-8 aligned
   for (var index = 0; index < cells.length; index += 8)
-    wbmap[6 + (index >> 3)] = ((cells[index + 0] << 7) |
+    wbmap[offset + (index >> 3)] = ((cells[index + 0] << 7) |
         (cells[index + 1] << 6) |
         (cells[index + 2] << 5) |
         (cells[index + 3] << 4) |
