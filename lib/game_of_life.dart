@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/painting.dart';
 
+var random = Random();
+
 void updateGameOfLife(
     int width, int height, Uint8List inputCells, Uint8List outputCells) {
   assert(width * height == inputCells.length);
@@ -185,7 +187,6 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
     _cellsA.fillRange(0, _cellsA.length - 1, 0);
     _cellsB.fillRange(0, _cellsB.length - 1, 0);
     _cells = _cellsA;
-    var random = Random();
     for (var y = 1; y < widget.height - 1; y++)
       for (var x = 1; x < widget.width - 1; x++)
         _cellsA[y * widget.width + x] = random.nextInt(5) == 0 ? 1 : 0;
@@ -244,15 +245,25 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
                             (d.localPosition.dx * widget.width / size).round();
                         var y =
                             (d.localPosition.dy * widget.height / size).round();
-                        //print("$x $y");
+                        var delta = 3;
                         if (x >= 0 &&
                             x < widget.width &&
                             y >= 0 &&
                             y < widget.height) {
                           setState(() {
-                            //print("updating $x $y");
-                            _cells[y * widget.width + x] = 1;
-                            //_cellsB[y * widget.width + x] = 1;
+                            for (var dy = -delta; dy <= delta; dy++)
+                              for (var dx = -delta; dx <= delta; dx++) {
+                                var rx = x + dx;
+                                var ry = y + dy;
+                                if (x >= 0 &&
+                                    x < widget.width &&
+                                    y >= 0 &&
+                                    y < widget.height) {
+                                  _cells[ry * widget.width + rx] ^=
+                                      random.nextInt(5) == 0 ? 1 : 0;
+                                  ;
+                                }
+                              }
                             updateImage();
                           });
                         }
