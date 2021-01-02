@@ -195,6 +195,10 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
     if (futureImage != null) await futureImage;
   }
 
+  void updateImage() {
+    futureImage = _createImage2(widget.width, widget.height, _cells);
+  }
+
   void update() {
     _waitForFutureImage();
     updateGameOfLife(
@@ -203,7 +207,7 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
         _cells == _cellsA ? _cellsA : _cellsB,
         _cells == _cellsA ? _cellsB : _cellsA);
     _cells = (_cells == _cellsA) ? _cellsB : _cellsA;
-    futureImage = _createImage2(widget.width, widget.height, _cells);
+    updateImage();
   }
 
   @override
@@ -232,15 +236,37 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
                 child: Container(
                     width: min(constraints.maxHeight, constraints.maxWidth),
                     height: min(constraints.maxHeight, constraints.maxWidth),
-                    child: FutureBuilder<ui.Image>(
-                        future: futureImage,
-                        builder: (context, snapshot) {
-                          return snapshot.hasData && snapshot.data != null
-                              ? CustomPaint(
-                                  painter: GameOfLifePainter(
-                                      state: this, image: snapshot.data!))
-                              : CircularProgressIndicator();
-                        })),
+                    child: GestureDetector(
+                      onPanUpdate: (DragUpdateDetails d) {
+                        var size =
+                            min(constraints.maxHeight, constraints.maxWidth);
+                        var x =
+                            (d.localPosition.dx * widget.width / size).round();
+                        var y =
+                            (d.localPosition.dy * widget.height / size).round();
+                        //print("$x $y");
+                        if (x >= 0 &&
+                            x < widget.width &&
+                            y >= 0 &&
+                            y < widget.height) {
+                          setState(() {
+                            //print("updating $x $y");
+                            _cells[y * widget.width + x] = 1;
+                            //_cellsB[y * widget.width + x] = 1;
+                            updateImage();
+                          });
+                        }
+                      },
+                      child: FutureBuilder<ui.Image>(
+                          future: futureImage,
+                          builder: (context, snapshot) {
+                            return snapshot.hasData && snapshot.data != null
+                                ? CustomPaint(
+                                    painter: GameOfLifePainter(
+                                        state: this, image: snapshot.data!))
+                                : CircularProgressIndicator();
+                          }),
+                    )),
               ),
             Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
