@@ -8,124 +8,90 @@ import 'package:flutter/painting.dart';
 
 var random = Random();
 
-void updateGameOfLife(
+void updateGameOfLifeBits(
     int width, int height, Uint8List inputCells, Uint8List outputCells) {
-  assert(width * height == inputCells.length);
-  assert(width * height == outputCells.length);
+  assert(width & 7 == 0);
+  var size = width * height;
+  assert(size == (inputCells.length << 3));
+  assert(size == (outputCells.length << 3));
   for (var y = width; y < (width - 1) * height; y += width) {
     for (var x = 1; x < width - 1; x++) {
       var neighbors = 0;
       var index = x + y;
       for (var ny = -width; ny <= width; ny += width) {
         for (var nx = -1; nx <= 1; nx++) {
-          if (ny == 0 && nx == 0) continue;
-          neighbors += inputCells[index + nx + ny];
+          if (ny == nx) continue;
+          var nIndex = index + nx + ny;
+          if ((inputCells[nIndex >> 3] & (1 << (7 - (nIndex & 7)))) == 0) {
+            continue;
+          }
+          if (++neighbors > 3) {
+            ny = width;
+            break;
+          }
         }
       }
-      if (inputCells[index] == 0) {
-        outputCells[index] = (neighbors == 3) ? 1 : 0;
-      } else {
-        outputCells[index] = (neighbors == 2 || neighbors == 3) ? 1 : 0;
-      }
+      var bitMask = (1 << (7 - (index & 7)));
+      var byteIndex = (index >> 3);
+      if (neighbors == 3 ||
+          (neighbors == 2 && (inputCells[byteIndex] & bitMask != 0)))
+        outputCells[byteIndex] |= bitMask;
+      else
+        outputCells[byteIndex] &= ~bitMask;
     }
   }
 }
 
-var _counter = 0x7f;
-var _pixels = Uint8List(1);
+// Bitmap image in the wbmp format (wapforum) redable by skia.
+class BitmapImage {
+  final int width;
+  final int height;
+  final int widthAligned;
+  late Uint8List _image;
+  late Uint8List _bitmap;
+  get bitmap => _bitmap;
+  get image => _image;
 
-int outVarSize(int v) {
-  assert(v >= 0);
-  return (v.bitLength + 6) ~/ 7;
-}
-
-int outVar(int v, Uint8List out, int outIndex) {
-  var parts = outVarSize(v);
-  for (var p = parts - 1; p > 0; p--)
-    out[outIndex++] = 0x80 | ((v >> (7 * p)) & 0x7F);
-  out[outIndex] = v & 0x7F;
-  return parts;
-}
-
-// TODO: Need to make this working for any width/height
-// TODO: Might be just worth directly modifying the bitmap too!
-Future<ui.Image> _createImage2(int width, int height, Uint8List cells) async {
-  final completer = Completer<ui.Image>();
-  // https://en.wikipedia.org/wiki/Wireless_Application_Protocol_Bitmap_Format
-  var wbmapWidth = width;
-  var wbmapHeight = height;
-  var wbmapWidthSize = outVarSize(wbmapWidth);
-  var wbmapHeightSize = outVarSize(wbmapHeight);
-  var wbmapWidthAligned = ((wbmapWidth + 7) ~/ 8) * 8;
-  var wbmapBits = wbmapWidthAligned * wbmapHeight;
-  assert(wbmapBits % 8 == 0);
-  var wbmap = Uint8List(2 + wbmapWidthSize + wbmapHeightSize + wbmapBits ~/ 8);
-  var offset = 0;
-  wbmap[offset++] = 0;
-  wbmap[offset++] = 0;
-  offset += outVar(wbmapWidth, wbmap, offset);
-  offset += outVar(wbmapHeight, wbmap, offset);
-  // TODO: Make it work on non-8 aligned
-  for (var index = 0; index < cells.length; index += 8)
-    wbmap[offset + (index >> 3)] = ((cells[index + 0] << 7) |
-        (cells[index + 1] << 6) |
-        (cells[index + 2] << 5) |
-        (cells[index + 3] << 4) |
-        (cells[index + 4] << 3) |
-        (cells[index + 5] << 2) |
-        (cells[index + 6] << 1) |
-        (cells[index + 7] << 0));
-  ui.decodeImageFromList(wbmap, (ui.Image image) => completer.complete(image));
-  return await completer.future;
-}
-
-Future<ui.Image> _createImage(int width, int height, Uint8List cells) async {
-  final completer = Completer<ui.Image>();
-  assert(width * height == cells.length);
-  if (_pixels.length != cells.length * 4) _pixels = Uint8List(cells.length * 4);
-  for (var index = 0; index < cells.length; index++) {
-    var alive = (cells[index] != 0);
-    _pixels[index * 4 + 0] = alive ? 0xFF : 0; //counter;
-    _pixels[index * 4 + 1] = alive ? 0 : 0xFF;
-    _pixels[index * 4 + 2] = _counter; //alive ? 0 : 0xFF;
-    _pixels[index * 4 + 3] = 0xFF; //alive ? 0 : 0xFF;
+  static int _outVarSize(int v) {
+    assert(v >= 0);
+    return (v.bitLength + 6) ~/ 7;
   }
-  ui.decodeImageFromPixels(
-    _pixels,
-    width,
-    height,
-    ui.PixelFormat.bgra8888,
-    (ui.Image image) {
-      completer.complete(image);
-    },
-  );
-  _counter++;
-  print("decodeImageFromPixels FUTURE CREATED!");
-  return await completer.future;
+
+  static int _outVar(int v, Uint8List out, int outIndex) {
+    var parts = _outVarSize(v);
+    for (var p = parts - 1; p > 0; p--)
+      out[outIndex++] = 0x80 | ((v >> (7 * p)) & 0x7F);
+    out[outIndex] = v & 0x7F;
+    return parts;
+  }
+
+  BitmapImage({required this.width, required this.height})
+      : widthAligned = ((width + 7) ~/ 8) * 8 {
+    // TODO: Eventually let this one go,
+    // but currently only aligned to 8 width allowed
+    assert(width & 7 == 0);
+    assert(width > 0 && width < 65536);
+    assert(height > 0 && height < 65536);
+    var rawImage = Uint8List(2 +
+        _outVarSize(width) +
+        _outVarSize(height) +
+        ((width + 7) ~/ 8) * height);
+    var bitmapOffset = 0;
+    rawImage[bitmapOffset++] = 0;
+    rawImage[bitmapOffset++] = 0;
+    bitmapOffset += _outVar(width, rawImage, bitmapOffset);
+    bitmapOffset += _outVar(height, rawImage, bitmapOffset);
+    _bitmap = Uint8List.sublistView(rawImage, bitmapOffset);
+    _image = rawImage;
+  }
 }
 
-// Future<ui.FrameInfo> makeImageFrame() async {
-//   var imageWidth = 64;
-//   var imageHeight = 64;
-//   var pixels = Uint8List(imageWidth * imageHeight * 4);
-//   for (var y = 0; y < imageHeight; y++)
-//     for (var x = 0; x < imageWidth; x++) {
-//       var offset = (y * imageWidth + x) * 4;
-//       pixels[offset + 0] = 0xFF;
-//       pixels[offset + 0] = (x * y) % 256;
-//       pixels[offset + 0] = (x + y) % 256;
-//       pixels[offset + 0] = 0xFF;
-//     }
-//   var imageBuff = await ui.ImmutableBuffer.fromUint8List(pixels);
-//   var imageDesc = ui.ImageDescriptor.raw(imageBuff,
-//       width: imageWidth,
-//       height: imageHeight,
-//       rowBytes: imageWidth * 4,
-//       pixelFormat: ui.PixelFormat.rgba8888);
-//   var codec = await imageDesc.instantiateCodec(
-//       targetWidth: imageWidth, targetHeight: imageHeight);
-//   return codec.getNextFrame();
-// }
+Future<ui.Image> _createImage(BitmapImage image) async {
+  final completer = Completer<ui.Image>();
+  ui.decodeImageFromList(
+      image.image, (ui.Image image) => completer.complete(image));
+  return await completer.future;
+}
 
 class GameOfLifePainter extends CustomPainter {
   final _GameOfLifeWidgetState state;
@@ -133,21 +99,6 @@ class GameOfLifePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    Paint p = Paint();
-    // var cellWidth = size.width / state.cellsByX;
-    // var cellHeight = size.height / state.cellsByY;
-    // for (var y = 0; y < state.cellsByY; y++) {
-    //   for (var x = 0; x < state.cellsByX; x++) {
-    //     var ry = y * cellHeight;
-    //     var rx = x * cellWidth;
-    //     var r = Rect.fromLTWH(rx, ry, cellWidth, cellHeight);
-    //     p.color = state.cells[y * state.cellsByX + x] == 0
-    //         ? Colors.green
-    //         : Colors.red;
-    //     canvas.drawRect(r, p);
-    //   }
-    // }
-    // canvas.drawImage(image!, Offset(5, 5), p);
     canvas.drawImageRect(
         image,
         Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
@@ -172,11 +123,11 @@ class GameOfLifeWidget extends StatefulWidget {
 
 class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
     with SingleTickerProviderStateMixin {
-  late Uint8List _cellsA;
-  late Uint8List _cellsB;
-  late Uint8List _cells;
+  late BitmapImage _imageA;
+  late BitmapImage _imageB;
+  late BitmapImage _image;
 
-  get cells => _cells;
+  get cells => _image.bitmap;
   get cellsByX => widget.width;
   get cellsByY => widget.height;
 
@@ -184,12 +135,19 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
   late Ticker _ticker;
 
   void _init() {
-    _cellsA.fillRange(0, _cellsA.length - 1, 0);
-    _cellsB.fillRange(0, _cellsB.length - 1, 0);
-    _cells = _cellsA;
+    _image = _imageA;
     for (var y = 1; y < widget.height - 1; y++)
-      for (var x = 1; x < widget.width - 1; x++)
-        _cellsA[y * widget.width + x] = random.nextInt(5) == 0 ? 1 : 0;
+      for (var x = 1; x < widget.width - 1; x++) {
+        var v = random.nextInt(5) == 0 ? 1 : 0;
+        var bitMask = 1 << (7 - (x & 7));
+        var byteIndex = (y * widget.width + x) >> 3;
+        if (x == 0 || y == 0 || x == widget.width - 1 || y == widget.height - 1)
+          v = 0;
+        if (v == 1)
+          _image.bitmap[byteIndex] |= bitMask;
+        else
+          _image.bitmap[byteIndex] &= ~bitMask;
+      }
   }
 
   void _waitForFutureImage() async {
@@ -197,26 +155,25 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
   }
 
   void updateImage() {
-    futureImage = _createImage2(widget.width, widget.height, _cells);
+    futureImage = _createImage(_image);
   }
 
   void update() {
     _waitForFutureImage();
-    updateGameOfLife(
+    updateGameOfLifeBits(
         widget.width,
         widget.height,
-        _cells == _cellsA ? _cellsA : _cellsB,
-        _cells == _cellsA ? _cellsB : _cellsA);
-    _cells = (_cells == _cellsA) ? _cellsB : _cellsA;
+        _image == _imageA ? _imageA.bitmap : _imageB.bitmap,
+        _image == _imageA ? _imageB.bitmap : _imageA.bitmap);
+    _image = (_image == _imageA) ? _imageB : _imageA;
     updateImage();
   }
 
   @override
   void initState() {
     super.initState();
-    var size = widget.width * widget.height;
-    _cellsA = Uint8List(size);
-    _cellsB = Uint8List(size);
+    _imageA = BitmapImage(width: widget.width, height: widget.height);
+    _imageB = BitmapImage(width: widget.width, height: widget.height);
     _init();
     update();
     _ticker = Ticker((Duration duration) => setState(() => update()));
@@ -259,9 +216,11 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
                                     x < widget.width &&
                                     y >= 0 &&
                                     y < widget.height) {
-                                  _cells[ry * widget.width + rx] ^=
-                                      random.nextInt(5) == 0 ? 1 : 0;
-                                  ;
+                                  var byteIndex = (ry * widget.width + rx) >> 3;
+                                  var bitMask = 1 << (7 - (rx & 7));
+                                  var v = random.nextInt(5) == 0 ? 1 : 0;
+                                  if (v != 0)
+                                    _image.bitmap[byteIndex] ^= bitMask;
                                 }
                               }
                             updateImage();
