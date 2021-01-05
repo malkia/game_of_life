@@ -27,7 +27,7 @@ jobs:
       run: flutter packages get
       working-directory: ./
     - name: Build Web
-      run: flutter build web --release --web-renderer=canvaskit
+      run: flutter build web --release --web-renderer=canvaskit --no-null-assertions --no-native-null-assertions --source-maps --csp
       working-directory: ./
     # - name: Test
     #   run: flutter test
