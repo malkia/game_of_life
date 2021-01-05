@@ -11,33 +11,43 @@ var random = Random();
 void updateGameOfLifeBits(
     int width, int height, Uint8List inputCells, Uint8List outputCells) {
   assert(width & 7 == 0);
-  var size = width * height;
+  final size = width * height;
   assert(size == (inputCells.length << 3));
   assert(size == (outputCells.length << 3));
+  outputCells.fillRange(0, (size >> 3) - 1, 0);
   for (var y = width; y < (width - 1) * height; y += width) {
     for (var x = 1; x < width - 1; x++) {
-      var neighbors = 0;
-      var index = x + y;
+      var aliveCells = 0;
+      final index = x + y;
       for (var ny = -width; ny <= width; ny += width) {
         for (var nx = -1; nx <= 1; nx++) {
-          if (ny == nx) continue;
-          var nIndex = index + nx + ny;
-          if ((inputCells[nIndex >> 3] & (1 << (7 - (nIndex & 7)))) == 0) {
+          final nIndex = index + nx + ny;
+          if ((inputCells[nIndex >> 3] & (1 << (7 - (nIndex & 7)))) == 0)
             continue;
-          }
-          if (++neighbors > 3) {
+          if (++aliveCells > 4) {
             ny = width;
             break;
           }
         }
       }
-      var bitMask = (1 << (7 - (index & 7)));
-      var byteIndex = (index >> 3);
-      if (neighbors == 3 ||
-          (neighbors == 2 && (inputCells[byteIndex] & bitMask != 0)))
+      if (aliveCells != 3 && aliveCells != 4) continue;
+      final bitMask = 1 << (7 - (index & 7));
+      final byteIndex = index >> 3;
+
+      // From https://en.wikipedia.org/wiki/Conway%27s_Game_of_Life#Algorithms
+      //
+      // To avoid decisions and branches in the counting loop, the rules can be
+      // rearranged from an egocentric approach of the inner field regarding its
+      // neighbours to a scientific observer's viewpoint:
+      //
+      // 1. if the sum of all nine fields in a given neighbourhood is 3, the
+      // inner field state for the next generation will be life
+      // 2. if the all-field sum is 4, the inner field retains its current state
+      // 3. every other sum sets the inner field to death.
+      //
+      if (aliveCells == 3 ||
+          (aliveCells == 4 && (inputCells[byteIndex] & bitMask) != 0))
         outputCells[byteIndex] |= bitMask;
-      else
-        outputCells[byteIndex] &= ~bitMask;
     }
   }
 }
