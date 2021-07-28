@@ -8,6 +8,22 @@ import 'package:flutter/painting.dart';
 
 var random = Random();
 
+/*
+   0 1 2 3 4 5 6 7 . 1 2 3 4 5 6 7
+0  x x x
+1   x x x
+2     x x x
+3       x x x
+4         x x x
+5           x x x
+
+    var topBits = inputCells[byte-width/8];
+    var midBits = inputCells[byte];
+    var botBits = inputCells[byte+width/8];
+    var mask = 0x80 | 0x40 | 0x20;
+
+*/
+
 void updateGameOfLifeBits(
     int width, int height, Uint8List inputCells, Uint8List outputCells) {
   assert(width & 7 == 0);
@@ -16,6 +32,7 @@ void updateGameOfLifeBits(
   assert(size == (outputCells.length << 3));
   outputCells.fillRange(0, (size >> 3) - 1, 0);
   for (var y = width; y < (width - 1) * height; y += width) {
+    var bits = 0;
     for (var x = 1; x < width - 1; x++) {
       var aliveCells = 0;
       final index = x + y;
@@ -252,21 +269,21 @@ class _GameOfLifeWidgetState extends State<GameOfLifeWidget>
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  FlatButton(
+                  TextButton(
                     child: Text('Play'),
                     onPressed: _ticker.isActive ? null : () => _ticker.start(),
                   ),
-                  FlatButton(
+                  TextButton(
                       child: Text('Stop'),
                       onPressed: _ticker.isActive
                           ? () => setState(() => _ticker.stop())
                           : null),
-                  FlatButton(
+                  TextButton(
                       child: Text('Step'),
                       onPressed: _ticker.isActive
                           ? null
                           : () => setState(() => update())),
-                  FlatButton(
+                  TextButton(
                     child: Text('Random'),
                     onPressed: () => setState(() {
                       _init();
